@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Price‑Strip & QR Generator</title>
+  <script src="https://unpkg.com/@zxing/library@0.18.10"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin: 1em; }
+    #video { width: 300px; height: auto; }
+    #qr { margin-top: 20px; }
+    #reset { margin-top: 10px; padding: 8px 16px; font-size: 16px; }
+  </style>
+</head>
+<body>
+
+<h2>Scan Price‑Encoded Code 128</h2>
+<video id="video" muted playsinline></video>
+<div id="qr"></div>
+<button id="reset">Reset Scanner</button>
+
+<script>
+  const codeReader = new ZXing.BrowserBarcodeReader();
+  const videoElement = document.getElementById('video');
+  const qrContainer = document.getElementById('qr');
+  let selectedDeviceId;
+
+  function stripUPC(raw) {
+    const parts = raw.split('0');
+    if (parts.length < 3) return null;
+    return '0' + parts.slice(2).join('0');
+  }
+
+  function beep() {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    osc.frequency.value = 600;
+    osc.connect(ctx.destination);
+    osc.start();
+    setTimeout(() => osc.stop(), 100);
+  }
+
+  function startScanning() {
+    codeReader
+      .listVideoInputDevices()
+      .then(camList => {
+        selectedDeviceId = camList.find(c => /back|rear|environment/i.test(c.label))?.deviceId || camList[0].deviceId;
+        return codeReader.decodeFromVideoDevice(selectedDeviceId, videoElement, result => {
+          if (result && result.text) {
+            const upc = stripUPC(result.text);
+            if (upc) {
+              codeReader.reset();
+              videoElement.srcObject?.getTracks().forEach(t => t.stop());
+              beep();
+              qrContainer.innerHTML = '';
+              QRCode.toCanvas(qrContainer, upc, { width: 200 });
+            } else {
+              alert("Invalid code. Couldn't strip UPC.");
+            }
+          }
+        });
+      })
+      .catch(err => console.error(err));
+  }
+
+  document.getElementById('reset').addEventListener('click', () => {
+    qrContainer.innerHTML = '';
+    codeReader.reset();
+    videoElement.srcObject?.getTracks().forEach(t => t.stop());
+    startScanning();
+  });
+
+  startScanning();
+</script>
+
+</body>
+</html>
